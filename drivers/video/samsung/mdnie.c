@@ -49,6 +49,9 @@
 #include "mdnie_table_superior.h"
 #elif defined(CONFIG_FB_S5P_S6E8AA0)
 #include "mdnie_table_m0.h"
+#ifdef CONFIG_ARCHIKERNEL_MDNIE_SHARPNESS
+#include "mdnie_table_m0_sharpness_tweak.h"
+#endif
 #elif defined(CONFIG_FB_S5P_EA8061) || defined(CONFIG_FB_S5P_S6EVR02)
 #include "mdnie_table_t0.h"
 #elif defined(CONFIG_FB_S5P_S6E63M0)
@@ -127,6 +130,10 @@
 static struct class *mdnie_class;
 struct mdnie_info *g_mdnie;
 
+#ifdef CONFIG_ARCHIKERNEL_MDNIE_SHARPNESS
+int mdnie_preset = 0;
+#endif
+
 static int mdnie_send_sequence(struct mdnie_info *mdnie, const unsigned short *seq)
 {
 	int ret = 0, i = 0;
@@ -173,7 +180,16 @@ static struct mdnie_tuning_info *mdnie_request_table(struct mdnie_info *mdnie)
 		table = &color_tone_table[mdnie->scenario % COLOR_TONE_1];
 		goto exit;
 	} else if (mdnie->scenario < SCENARIO_MAX) {
+#ifdef CONFIG_ARCHIKERNEL_MDNIE_SHARPNESS
+		// depending on sharpness tweak status, take either normal or
+		// tweaked tuning table
+		if (mdnie_preset == 0)
+			table = &tuning_table[mdnie->cabc][mdnie->mode][mdnie->scenario];
+		else
+			table = &tuning_table_sharp_tweak[mdnie->cabc][mdnie->mode][mdnie->scenario];
+#else
 		table = &tuning_table[mdnie->cabc][mdnie->mode][mdnie->scenario];
+#endif
 		goto exit;
 	}
 
@@ -201,7 +217,11 @@ exit:
 	return;
 }
 
+#ifdef CONFIG_ARCHIKERNEL_MDNIE_SHARPNESS
+void mdnie_update(struct mdnie_info *mdnie)
+#else
 static void mdnie_update(struct mdnie_info *mdnie)
+#endif
 {
 	struct mdnie_tuning_info *table = NULL;
 
@@ -797,6 +817,19 @@ static ssize_t accessibility_store(struct device *dev,
 	return count;
 }
 
+static ssize_t negative_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return accessibility_show(dev, attr, buf);
+}
+
+static ssize_t negative_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	return accessibility_store(dev, attr, buf, count);
+}
+
+
 #if !defined(CONFIG_FB_MDNIE_PWM)
 static ssize_t color_correct_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -826,6 +859,7 @@ static struct device_attribute mdnie_attributes[] = {
 #endif
 	__ATTR(tuning, 0664, tuning_show, tuning_store),
 	__ATTR(accessibility, 0664, accessibility_show, accessibility_store),
+	__ATTR(negative, 0664, negative_show, negative_store),
 #if !defined(CONFIG_FB_MDNIE_PWM)
 	__ATTR(color_correct, 0444, color_correct_show, NULL),
 #endif
